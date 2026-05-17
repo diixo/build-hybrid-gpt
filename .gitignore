@@ -1,0 +1,23 @@
+*.pyc
+*__pycache__/
+.vscode/
+.DS_Store
+
+# Environments
+.env
+.env-django
+.env-server
+.venv
+env/
+venv/
+ENV/
+env.bak/
+
+log.txt
+
+
+models/
+datasets/
+train_products/
+
+20220301-en
