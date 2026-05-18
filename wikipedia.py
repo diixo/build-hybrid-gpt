@@ -97,4 +97,4 @@ if __name__ == "__main__":
             filename = os.path.join(DATA_CACHE_DIR, f"{local_dir}_{split}_{shard_index:06d}")
             write_datafile(filename, all_tokens_np[:token_count])
 
-        print(f"tokens.all={token_count}, rows={row_amount}, shards={shard_index+1}")
+        print(f"tokens.all={token_count}, rows={row_amount}, shards={shard_index+1}, nprocs={nprocs}")
