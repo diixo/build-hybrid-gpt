@@ -37,7 +37,7 @@ added = tokenizer.add_special_tokens({
 
 print(f"added: {added}, vocab_size: {len(tokenizer)}")
 
-tokenizer.save_pretrained(output_path)
+#tokenizer.save_pretrained(output_path)
 
 test_text = "<|user|> What is the capital of France? <|assistant|> Paris. <|endoftext|>"
 
