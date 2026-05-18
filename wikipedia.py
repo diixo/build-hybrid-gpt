@@ -23,11 +23,6 @@ DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
 os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 
-fval = load_dataset("aitetic/wikipedia", name="20220301.simple", split="train")
-
-# download the dataset
-fw = load_dataset("aitetic/wikipedia", name="20220301.en", split="train")
-
 tokenizer = GPT2TokenizerFast.from_pretrained("data/gpt-noomo-32k", local_files_only=True)
 
 eot = tokenizer.eos_token_id
@@ -98,6 +93,12 @@ def write_split(pool, dataset, split_name):
 
 
 if __name__ == "__main__":
+
+    fval = load_dataset("aitetic/wikipedia", name="20220301.simple", split="train")
+
+    # download the dataset
+    fw = load_dataset("aitetic/wikipedia", name="20220301.en", split="train")
+
 
     # tokenize all documents and write output shards, each of shard_size tokens (last shard has remainder)
     nprocs = max(1, os.cpu_count()//2)
