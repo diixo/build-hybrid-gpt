@@ -40,6 +40,12 @@ hellaswags = {
 enc = tiktoken.get_encoding("gpt2")
 
 
+def encode_text(text, tokenizer=None):
+    if tokenizer is None:
+        return enc.encode(text)
+    return tokenizer.encode(text, add_special_tokens=False)
+
+
 def download(split):
     """Downloads HellaSwag DATA_CACHE_DIR"""
     os.makedirs(DATA_CACHE_DIR, exist_ok=True)
@@ -50,7 +56,7 @@ def download(split):
         download_file(data_url, data_filename)
 
 
-def render_example(example):
+def render_example(example, tokenizer=None):
     """
     Given the Hellaswag example as a dictionary, render it as three torch tensors:
     - tokens (the tokens of context + completion, of size 4xN, as there are always 4 candidates)
@@ -69,12 +75,12 @@ def render_example(example):
     }
 
     # gather up all the tokens
-    ctx_tokens = enc.encode(ctx)
+    ctx_tokens = encode_text(ctx, tokenizer=tokenizer)
     data["ctx_tokens"] = ctx_tokens
     tok_rows = []
     mask_rows = []
     for end in endings: # sz=4
-        end_tokens = enc.encode(" " + end) # note: prepending " " because GPT-2 tokenizer
+        end_tokens = encode_text(" " + end, tokenizer=tokenizer)
         tok_rows.append(ctx_tokens + end_tokens)
         mask_rows.append([0]*len(ctx_tokens) + [1]*len(end_tokens))
         data["ending_tokens"].append(end_tokens)
@@ -100,13 +106,13 @@ def iterate_examples(split):
 
 
 @torch.no_grad()
-def evaluate_hellaswag(model):
+def evaluate_hellaswag(model, tokenizer=None):
 
     num_correct_norm = 0
     num_correct = 0
     num_total = 0
     for example in iterate_examples("val"):
-        data, tokens, mask, label = render_example(example)
+        data, tokens, mask, label = render_example(example, tokenizer=tokenizer)
         tokens = tokens.to(device)
         mask = mask.to(device)          # (4, max_len)
 

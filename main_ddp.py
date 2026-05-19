@@ -163,14 +163,13 @@ for step in range(max_steps):
             if i % ddp_world_size != ddp_rank:
                 continue
             # render the example into tokens and labels
-            _, tokens, mask, label = render_example(example)
+            _, tokens, mask, label = render_example(example, tokenizer=tokenizer)
             tokens = tokens.to(device)
             mask = mask.to(device)
             # get the logits
             with torch.no_grad():
                 with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    output = model(tokens, mask)
-                    logits, loss = output.logits, output.loss
+                    logits = model(tokens).logits
                 pred_norm = get_most_likely_row(tokens, mask, logits)
             num_total += 1
             num_correct_norm += int(pred_norm == label)

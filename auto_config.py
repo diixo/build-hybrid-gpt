@@ -39,7 +39,7 @@ class AutoConfigLlama:
 
 
         # Check alls special tokens
-        print(f"Special tokens =", tokenizer.special_tokens_map)
+        print(f"Special tokens =\n{json.dumps(tokenizer.special_tokens_map, indent=2)}")
 
         # Check eos_token_id and the token itself
         if tokenizer.pad_token is None:

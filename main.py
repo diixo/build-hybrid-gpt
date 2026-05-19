@@ -4,6 +4,7 @@
 
 import os
 import time
+import numpy as np
 import torch
 from hellaswag import render_example, iterate_examples, get_most_likely_row
 from model_llama import GPTLlama
@@ -18,11 +19,11 @@ if torch.cuda.is_available():
 
 SEQUENCE_LENGTH = 1024
 
-fixed_lr = 3e-4
+fixed_lr = 1e-4
 
-eval_steps = 100
+eval_steps = 250
 
-total_batch_size = 65536 # 2**16, ~65k, in number of tokens
+total_batch_size = 65536 # 2**16, ~65k, in number of tokens, should be divisible by (B * SEQUENCE_LENGTH * ddp_world_size)
 B = 8 # micro batch size
 
 # for high-load GPU:
@@ -47,23 +48,33 @@ if __name__ == "__main__":
     device_type = "cuda" if device.startswith("cuda") else "cpu"
 
     T = SEQUENCE_LENGTH
-    assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
+    assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by (B * T * ddp_world_size)"
 
     grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
-    max_steps = int(10_000_000_000 // total_batch_size) # steps is ~1 epoch (10B), if data is 10B tokens and batch size 128k tokens
-
-    if master_process:
-        print(f"total desired batch size: {total_batch_size}")
-        print(f"=> calculated grad_accum_steps: {grad_accum_steps}, max_steps: {max_steps}")
 
     train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="train", master_process=master_process)
     val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="val", master_process=master_process)
+
+    #####################################################################################################
+
+    tokens_per_micro_batch = B * T * ddp_world_size
+    train_micro_batches = sum(
+        (len(np.load(shard_path, mmap_mode="r")) - 1) // tokens_per_micro_batch
+        for shard_path in train_loader.shards
+    )
+    max_steps = train_micro_batches // grad_accum_steps # one full pass through the current train shards
+    assert max_steps > 0, "train shards do not contain enough tokens for one optimizer step"
+
+    if master_process:
+        print(f"total desired batch size: {total_batch_size}")
+        print(f"=> max_steps: {max_steps}, calculated grad_accum_steps: {grad_accum_steps}")
+
 
     torch.set_float32_matmul_precision('high')
 
     # create model
     model: GPTLlama = None
-    model, tokenizer = AutoConfigLlama.from_config(size_type="mini")
+    model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type="gpt-noomo-32k")
     model.to(device)
 
     raw_model = model # always contains the "raw" unwrapped model
@@ -127,14 +138,13 @@ if __name__ == "__main__":
                 if i % ddp_world_size != ddp_rank:
                     continue
                 # render the example into tokens and labels
-                _, tokens, mask, label = render_example(example)
+                _, tokens, mask, label = render_example(example, tokenizer=tokenizer)
                 tokens = tokens.to(device)
                 mask = mask.to(device)
                 # get the logits
                 with torch.no_grad():
                     with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                        output = model(tokens, mask)
-                        logits, loss = output.logits, output.loss
+                        logits = model(tokens).logits
                     pred_norm = get_most_likely_row(tokens, mask, logits)
                 num_total += 1
                 num_correct_norm += int(pred_norm == label)
