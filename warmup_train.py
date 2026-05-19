@@ -43,7 +43,10 @@ def custom_collate_fn(batch, max_seq_length, pad_token_id, eos_token_id, device,
         inputs_tensor: [batch_size, seq_len]
         targets_tensor: [batch_size, seq_len]
         attention_mask: [batch_size, seq_len]
+        dataset_token_count: int, number of tokenized dataset tokens before EOS/padding
     """
+
+    dataset_token_count = sum(int(item.numel()) for item in batch)
 
     # Find the longest sequence in the batch
     batch_max_length = max(len(item) + 1 for item in batch)
@@ -85,7 +88,7 @@ def custom_collate_fn(batch, max_seq_length, pad_token_id, eos_token_id, device,
     inputs_tensor = torch.stack(inputs_lst).to(device)
     targets_tensor = torch.stack(targets_lst).to(device)
     attention_mask = torch.stack(attn_lst).to(device)
-    return inputs_tensor, targets_tensor, attention_mask
+    return inputs_tensor, targets_tensor, attention_mask, dataset_token_count
 
 
 class WikipediaTextDataset(IterableDataset):
@@ -138,6 +141,9 @@ class Trainer:
 
     def __init__(self, model, dataset, config):
         self.losses = []
+        self.step_losses = []
+        self.epoch_dataset_token_counts = []
+        self.dataset_tokens_processed = 0
 
         self.model = model.to(config.device).float()
         self.config = config
@@ -169,13 +175,16 @@ class Trainer:
 
         self.losses = []          # token-weighted epoch losses (good for PPL)
         self.step_losses = []     # avg per-window accumulation raw loss (for plotting)
+        self.epoch_dataset_token_counts = []
+        self.dataset_tokens_processed = 0
 
         self.model.train()
         for epoch in range(self.config.epochs):
             pbar = tqdm(self.loader, desc=f"Epoch {epoch + 1}/{self.config.epochs}")
 
             total_loss_sum = 0.0   # sum of (mean_loss * num_valid_tokens)
-            total_tokens = 0       # number of non-ignored tokens
+            total_loss_tokens = 0  # number of non-ignored tokens
+            total_dataset_tokens = 0
             first_loss = None
 
             self.optimizer.zero_grad(set_to_none=True)
@@ -187,17 +196,9 @@ class Trainer:
                 #x = x.to(self.config.device, non_blocking=True)
                 #y = y.to(self.config.device, non_blocking=True)
 
-                if isinstance(batch, dict):
-                    input_ids = batch["input_ids"]
-                    labels = batch["labels"]
-                    attention_mask = batch.get("attention_mask", None)
-                else:
-                    if len(batch) == 2:
-                        input_ids, labels = batch
-                        attention_mask = None
-                    else:
-                        input_ids, labels, attention_mask = batch
+                input_ids, labels, attention_mask, dataset_token_count = batch
 
+                total_dataset_tokens += int(dataset_token_count)
 
                 # Forward pass
                 raw_loss = self.model(input_ids, labels).loss
@@ -208,9 +209,9 @@ class Trainer:
 
                 # token-weighted stats for correct epoch avg loss / PPL
                 with torch.no_grad():
-                    ntok = int((labels != -100).sum().item())
-                total_loss_sum += raw * ntok
-                total_tokens += ntok
+                    loss_token_count = int((labels != -100).sum().item())
+                total_loss_sum += raw * loss_token_count
+                total_loss_tokens += loss_token_count
 
                 # ---- backward (accumulation) ----
                 loss = raw_loss / grad_accum_steps
@@ -238,20 +239,22 @@ class Trainer:
 
 
             # ---- epoch metrics (token-weighted, correct for variable lengths) ----
-            if total_tokens == 0:
+            if total_loss_tokens == 0:
                 epoch_avg_loss = float("nan")
                 ppl = float("nan")
             else:
-                epoch_avg_loss = total_loss_sum / total_tokens
+                epoch_avg_loss = total_loss_sum / total_loss_tokens
                 # # Calculate Perplexity, avoid overflow for huge losses
                 ppl = math.exp(epoch_avg_loss) if epoch_avg_loss < 50 else float("inf")
 
             self.losses.append(epoch_avg_loss)
-            print(f"Epoch {epoch+1}: epoch_avg_loss={epoch_avg_loss:.4f}, PPL={ppl:.4f}")
+            self.epoch_dataset_token_counts.append(total_dataset_tokens)
+            self.dataset_tokens_processed += total_dataset_tokens
+            print(f"Epoch {epoch+1}: epoch_avg_loss={epoch_avg_loss:.4f}, PPL={ppl:.4f}, dataset_tokens={total_dataset_tokens:,}")
 
         print(
             "✅ Training completed,",
-            f"steps: {len(self.step_losses)}, final_avg_loss: {self.losses[-1]:.4f}"
+            f"steps: {len(self.step_losses)}, final_avg_loss: {self.losses[-1]:.4f}, dataset_tokens_processed={self.dataset_tokens_processed:,}"
         )
 
         return self.losses, self.step_losses
