@@ -20,7 +20,7 @@ if torch.cuda.is_available():
 
 SEQUENCE_LENGTH = 1024
 
-fixed_lr = 1e-4
+LEARNING_RATE = 8e-5
 
 eval_steps = 250
 
@@ -56,7 +56,39 @@ if __name__ == "__main__":
     train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="train", master_process=master_process)
     val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="val", master_process=master_process)
 
+    torch.set_float32_matmul_precision('high')
+
+    # create model
+    model: GPTLlama = None
+    model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type="gpt-noomo-32k")
+
     #####################################################################################################
+
+    warmup_config = WarmupTrainerConfig(
+        epochs=1,
+        batch_size=10,
+        learning_rate=LEARNING_RATE,
+        device=device,
+    )
+
+    print("starting warmup stage before full pre-train")
+
+    model, warmup_epoch_losses, _ = run_warmup_stage(model, tokenizer, warmup_config)
+
+    if warmup_epoch_losses:
+        print(f"warmup completed: final_avg_loss={warmup_epoch_losses[-1]:.4f}")
+
+    #####################################################################################################
+
+    model.to(device)
+
+    raw_model = model # always contains the "raw" unwrapped model
+
+    optimizer = raw_model.configure_optimizers(
+        weight_decay=0.1,
+        learning_rate=LEARNING_RATE,
+        device_type=device_type,
+        master_process=master_process)
 
     tokens_per_micro_batch = B * T * ddp_world_size
     train_micro_batches = sum(
@@ -66,40 +98,9 @@ if __name__ == "__main__":
     max_steps = train_micro_batches // grad_accum_steps # one full pass through the current train shards
     assert max_steps > 0, "train shards do not contain enough tokens for one optimizer step"
 
-    if master_process:
-        print(f"total desired batch size: {total_batch_size}")
-        print(f"=> max_steps: {max_steps}, calculated grad_accum_steps: {grad_accum_steps}")
+    print(f"total desired batch size: {total_batch_size}")
+    print(f"=> max_steps: {max_steps}, calculated grad_accum_steps: {grad_accum_steps}")
 
-
-    torch.set_float32_matmul_precision('high')
-
-    # create model
-    model: GPTLlama = None
-    model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type="gpt-noomo-32k")
-
-    warmup_config = WarmupTrainerConfig(
-        epochs=1,
-        batch_size=10,
-        learning_rate=8e-5,
-        device=device,
-    )
-    if master_process:
-        print("starting warmup stage before full pre-train")
-
-    model, warmup_epoch_losses, _ = run_warmup_stage(model, tokenizer, warmup_config)
-
-    if master_process and warmup_epoch_losses:
-        print(f"warmup completed: final_avg_loss={warmup_epoch_losses[-1]:.4f}")
-
-    model.to(device)
-
-    raw_model = model # always contains the "raw" unwrapped model
-
-    optimizer = raw_model.configure_optimizers(
-        weight_decay=0.1,
-        learning_rate=fixed_lr,
-        device_type=device_type,
-        master_process=master_process)
 
     # create the log directory we will write checkpoints to and log to
     log_dir = "train_products"
@@ -209,7 +210,7 @@ if __name__ == "__main__":
         tokens_per_sec = tokens_processed / dt
 
         if master_process:
-            print(f"step {step:5d} | loss: {loss_accum.item():.6f} | lr: {fixed_lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+            print(f"step {step:5d} | loss: {loss_accum.item():.6f} | lr: {LEARNING_RATE:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
             with open(log_file, "a") as f:
                 f.write(f"{step} train {loss_accum.item():.6f}\n")
 
