@@ -1,3 +1,8 @@
+"""
+Short-context warmup - train on first 100 tokens of each dataset item using a small learning rate as warmup before full pre-training.
+This is a simple way to "prime" the model's weights and can lead to faster convergence and better performance in the early stages of training.
+"""
+
 import json
 import os
 import torch, math, random, numpy as np
