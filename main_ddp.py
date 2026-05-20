@@ -81,6 +81,9 @@ model, warmup_epoch_losses, _ = run_warmup_stage(
     tokenizer,
     warmup_config,
 )
+if ddp:
+    # wait for all processes to finish warmup before entering the main training stage
+    dist.barrier()
 
 
 T = SEQUENCE_LENGTH
