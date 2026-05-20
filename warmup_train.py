@@ -404,6 +404,6 @@ if __name__ == "__main__":
         max_rows=smoke_rows,
     )
 
-    #save_trained_model(SAVE_DIR, model, model_type="llama", train_config=train_config, tokenizer_type=tokenizer_type)
+    save_trained_model(SAVE_DIR, model, model_type="llama-warmup", train_config=train_config, tokenizer_type=tokenizer_type)
 
     plot_losses(step_losses, type(model).__name__, "Steps")
