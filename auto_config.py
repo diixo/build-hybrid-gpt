@@ -2,7 +2,8 @@
 import json
 from transformers import GPT2TokenizerFast
 from model_llama import GPTLlama
-
+import torch
+import os
 
 class AutoConfigLlama:
 
@@ -24,6 +25,7 @@ class AutoConfigLlama:
                 "flash_attn": True,
             }
     }
+
 
     @staticmethod
     def from_config(size_type: str, tokenizer_type="gpt2"):
@@ -56,3 +58,26 @@ class AutoConfigLlama:
         model = GPTLlama(**config_kwargs)
 
         return model, tokenizer
+
+
+    @staticmethod
+    def from_pretrained_model(file_path: str):
+
+        if not os.path.exists(file_path): return None
+
+        ckpt = torch.load(file_path, map_location="cpu", weights_only=False)
+
+        extra = ckpt.get("extra", {})
+        print("extra:", extra)
+
+        config = ckpt['config']
+
+        # get the model class from mapping
+        model_cls = GPTLlama
+
+        # create the model instance use mapped class
+        model = model_cls(**config) if isinstance(config, dict) else model_cls(config)
+        model.load_state_dict(ckpt['model'])
+
+        return model
+
