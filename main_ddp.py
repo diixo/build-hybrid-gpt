@@ -76,11 +76,11 @@ warmup_config = WarmupTrainerConfig(
 warmup_epoch_losses = []
 if master_process:
     print("starting warmup stage before full pre-train")
-    model, warmup_epoch_losses, _ = run_warmup_stage(
-        model,
-        tokenizer,
-        warmup_config,
-    )
+model, warmup_epoch_losses, _ = run_warmup_stage(
+    model,
+    tokenizer,
+    warmup_config,
+)
 
 
 T = SEQUENCE_LENGTH
