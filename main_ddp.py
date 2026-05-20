@@ -7,7 +7,7 @@ from model_llama import GPTLlama
 from auto_config import AutoConfigLlama
 from dataloader import DataLoaderLite
 from utils import generate_text
-from warmup_train import TrainerConfig as WarmupTrainerConfig, run_warmup_stage
+from warmup_ddp import TrainerConfig as WarmupTrainerConfig, run_warmup_stage
 
 
 # run the training loop
