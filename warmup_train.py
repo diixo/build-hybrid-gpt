@@ -100,21 +100,19 @@ def custom_collate_fn(batch, max_seq_length, pad_token_id, eos_token_id, device,
 
 class WikipediaTextDataset(IterableDataset):
 
-    def __init__(self, hf_dataset, tokenizer, max_seq_length=MAX_LEN, max_rows=None, text_key="text", master_process=True):
+    def __init__(self, hf_dataset, tokenizer, max_seq_length=MAX_LEN, max_rows=None, text_key="text"):
         self.hf_dataset = hf_dataset
         self.tokenizer = tokenizer
         self.max_seq_length = max_seq_length
         self.max_rows = max_rows
         self.text_key = text_key
-        self.master_process = master_process
 
         total_rows = len(self.hf_dataset)
         self.total_rows = min(total_rows, max_rows) if max_rows is not None else total_rows
 
-        if self.master_process:
-            print(
-                f"WikipediaTextDataset::loaded rows.sz={self.total_rows}, max_rows={self.max_rows}, max_seq_length={self.max_seq_length}"
-            )
+        print(
+            f"WikipediaTextDataset::loaded rows.sz={self.total_rows}, max_rows={self.max_rows}, max_seq_length={self.max_seq_length}"
+        )
 
     def __len__(self):
         return self.total_rows
@@ -148,12 +146,11 @@ class WikipediaTextDataset(IterableDataset):
 
 class Trainer:
 
-    def __init__(self, model, dataset, config, tokenizer, master_process=True):
+    def __init__(self, model, dataset, config, tokenizer):
         self.losses = []
         self.step_losses = []
         self.epoch_dataset_token_counts = []
         self.dataset_tokens_processed = 0
-        self.master_process = master_process
 
         self.model = model.to(config.device).float()
         self.config = config
@@ -177,13 +174,12 @@ class Trainer:
     def train(self):
 
         torch.set_float32_matmul_precision("high")
-        num_loader_steps = max(1, len(self.loader))
 
         # 1) Gradient accumulation should be an explicit hyperparameter
         grad_accum_steps = int(getattr(self.config, "grad_accum_steps", 1))
         grad_accum_steps = max(1, grad_accum_steps)
         # if epoch has fewer batches than accum steps — clamp
-        grad_accum_steps = min(grad_accum_steps, num_loader_steps)
+        grad_accum_steps = min(grad_accum_steps, max(1, len(self.loader)))
 
         self.losses = []          # token-weighted epoch losses (good for PPL)
         self.step_losses = []     # avg per-window accumulation raw loss (for plotting)
@@ -192,7 +188,7 @@ class Trainer:
 
         self.model.train()
         for epoch in range(self.config.epochs):
-            pbar = tqdm(self.loader, desc=f"Epoch {epoch + 1}/{self.config.epochs}", disable=not self.master_process)
+            pbar = tqdm(self.loader, desc=f"Epoch {epoch + 1}/{self.config.epochs}")
 
             total_loss_sum = 0.0   # sum of (mean_loss * num_valid_tokens)
             total_loss_tokens = 0  # number of non-ignored tokens
@@ -209,9 +205,6 @@ class Trainer:
                 #y = y.to(self.config.device, non_blocking=True)
 
                 input_ids, labels, attention_mask, dataset_token_count = batch
-                window_start = step - (step % grad_accum_steps)
-                window_size = min(grad_accum_steps, num_loader_steps - window_start)
-                should_step = ((step + 1) % grad_accum_steps == 0) or ((step + 1) == num_loader_steps)
 
                 total_dataset_tokens += int(dataset_token_count)
 
@@ -229,30 +222,28 @@ class Trainer:
                 total_loss_tokens += loss_token_count
 
                 # ---- backward (accumulation) ----
-                loss = raw_loss / window_size
+                loss = raw_loss / grad_accum_steps
                 loss.backward()
 
                 # Progress bar smoothing
                 if first_loss is None:
                     first_loss = raw
-                    if self.master_process:
-                        pbar.set_postfix(loss=f"{first_loss:.4f}", accum_steps=str(grad_accum_steps))
+                    pbar.set_postfix(loss=f"{first_loss:.4f}", accum_steps=str(grad_accum_steps))
 
 
                 # Optimizer step
-                if should_step:
+                if ((step + 1) % grad_accum_steps == 0) or ((step + 1) == len(self.loader)):
                     if getattr(self.config, "max_grad_norm", None) is not None:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), float(self.config.max_grad_norm))
                     self.optimizer.step()
                     self.optimizer.zero_grad(set_to_none=True)
 
                     # calculate the average raw loss for current accumulation window
-                    step_avg_loss = accum_raw_sum / window_size
+                    step_avg_loss = accum_raw_sum / grad_accum_steps
                     accum_raw_sum = 0.0
                     self.step_losses.append(step_avg_loss)
 
-                    if self.master_process:
-                        pbar.set_postfix(loss=f"{step_avg_loss:.4f}", accum_steps=str(grad_accum_steps))
+                    pbar.set_postfix(loss=f"{step_avg_loss:.4f}", accum_steps=str(grad_accum_steps))
 
 
             # ---- epoch metrics (token-weighted, correct for variable lengths) ----
@@ -267,14 +258,12 @@ class Trainer:
             self.losses.append(epoch_avg_loss)
             self.epoch_dataset_token_counts.append(total_dataset_tokens)
             self.dataset_tokens_processed += total_dataset_tokens
-            if self.master_process:
-                print(f"Epoch {epoch+1}: epoch_avg_loss={epoch_avg_loss:.4f}, PPL={ppl:.4f}, dataset_tokens={total_dataset_tokens:_}")
+            print(f"Epoch {epoch+1}: epoch_avg_loss={epoch_avg_loss:.4f}, PPL={ppl:.4f}, dataset_tokens={total_dataset_tokens:_}")
 
-        if self.master_process and self.losses:
-            print(
-                "✅ Training completed,",
-                f"steps: {len(self.step_losses)}, final_avg_loss: {self.losses[-1]:.4f}, dataset_tokens_processed={self.dataset_tokens_processed:_}"
-            )
+        print(
+            "✅ Training completed,",
+            f"steps: {len(self.step_losses)}, final_avg_loss: {self.losses[-1]:.4f}, dataset_tokens_processed={self.dataset_tokens_processed:_}"
+        )
 
         return self.losses, self.step_losses
 
@@ -301,21 +290,11 @@ def run_warmup_stage(
 ):
     fw = load_dataset("aitetic/wikipedia", name="20220301.en", split="train")
 
-    dataset = WikipediaTextDataset(
-        fw,
-        tokenizer,
-        max_seq_length=MAX_LEN,
-        max_rows=max_rows,
-    )
+    dataset = WikipediaTextDataset(fw, tokenizer, max_seq_length=MAX_LEN, max_rows=max_rows)
     if len(dataset) == 0:
         return model, [], []
 
-    trainer = Trainer(
-        model,
-        dataset,
-        train_config,
-        tokenizer,
-    )
+    trainer = Trainer(model, dataset, train_config, tokenizer)
     epoch_losses, step_losses = trainer.train()
 
     return trainer.model, epoch_losses, step_losses
