@@ -57,18 +57,3 @@ def plot_loss(losses: list, model_type: str):
     plt.show()
 
 
-
-def save_trained_model(model, save_directory: str, file_name: str = "model.pt", train_config: dict = {}, **extra):
-
-    os.makedirs(save_directory, exist_ok=True)
-
-    ckpt = {
-        "model": model.state_dict(),
-        "config": (model.config if isinstance(model.config, dict) else getattr(model.config, "__dict__", None)),
-        "train_config": (train_config if isinstance(train_config, dict) else getattr(train_config, "__dict__", None)),
-        "extra": extra,
-    }
-
-    checkpoint_path = os.path.join(save_directory, file_name)
-    torch.save(ckpt, checkpoint_path)
-

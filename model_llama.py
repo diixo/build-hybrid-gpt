@@ -7,6 +7,7 @@ GPT-LLaMA model
 import json
 import math
 import os
+import inspect
 from pathlib import Path
 import torch
 import torch.nn as nn
@@ -597,3 +598,17 @@ class GPTLlama(nn.Module):
                 attention_mask = torch.cat((attention_mask, next_mask), dim=1)
 
         return input_ids
+
+
+    def save_model(self, save_directory: str, file_name: str = "model.pt", train_config: dict = {}, **extra):
+
+        os.makedirs(save_directory, exist_ok=True)
+
+        ckpt = {
+            "model": self.state_dict(),
+            "config": (self.config if isinstance(self.config, dict) else getattr(self.config, "__dict__", None)),
+            "train_config": (train_config if isinstance(train_config, dict) else getattr(train_config, "__dict__", None)),
+            "architecture": type(self).__name__,
+            "extra": extra,
+        }
+        torch.save(ckpt, os.path.join(save_directory, file_name))

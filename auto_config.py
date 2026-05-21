@@ -67,6 +67,7 @@ class AutoConfigLlama:
 
         ckpt = torch.load(file_path, map_location="cpu", weights_only=False)
 
+        print("architecture:", ckpt.get("architecture", "unknown"))
         extra = ckpt.get("extra", {})
         print("extra:", extra)
 

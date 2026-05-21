@@ -7,15 +7,14 @@ import json
 import os
 import torch, math, random, numpy as np
 from dataclasses import dataclass
-from itertools import islice
 from model_llama import GPTLlama
 from auto_config import AutoConfigLlama
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from transformers import set_seed
-from utils import save_trained_model
-from datasets import load_dataset # pip install datasets
+
+from datasets import load_dataset
 
 import matplotlib.pyplot as plt
 
@@ -328,15 +327,13 @@ if __name__ == "__main__":
 
     model: GPTLlama = None
 
-    train_config = TrainerConfig(learning_rate=LEARNING_RATE, batch_size=10, grad_accum_steps=1)
+    train_config = TrainerConfig(learning_rate=LEARNING_RATE, batch_size=8, grad_accum_steps=1)
 
     model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type=tokenizer_type)
 
 
-    #smoke_rows = SMOKE_ROWS if TRAIN_MODE == "smoke-train" else None
-
     print(f"model.sz={model.get_num_params()}")
-    smoke_rows = 1080 #None
+    smoke_rows = 480 #None
 
     model, epoch_losses, step_losses = run_warmup_stage(
         model,
@@ -347,6 +344,6 @@ if __name__ == "__main__":
 
     extra_info = {"tokenizer_type": tokenizer_type}
 
-    save_trained_model(model, SAVE_DIR, file_name=FILE_NAME, train_config=train_config, **extra_info)
+    model.save_model(SAVE_DIR, file_name=FILE_NAME, train_config=train_config, **extra_info)
 
     plot_losses(step_losses, type(model).__name__, "Steps")
