@@ -7,7 +7,6 @@ from model_llama import GPTLlama
 from auto_config import AutoConfigLlama
 from dataloader import DataLoaderLite
 from utils import generate_text
-from warmup_ddp import TrainerConfig as WarmupTrainerConfig, run_warmup_stage
 
 
 # run the training loop
@@ -66,25 +65,6 @@ eval_steps = 250
 model: GPTLlama = None
 model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type="gpt-noomo-32k")
 
-warmup_config = WarmupTrainerConfig(
-    epochs=1,
-    batch_size=10,
-    learning_rate=fixed_lr,
-    device=device,
-    grad_accum_steps=1,
-)
-warmup_epoch_losses = []
-if master_process:
-    print("starting warmup stage before full pre-train")
-model, warmup_epoch_losses, _ = run_warmup_stage(
-    model,
-    tokenizer,
-    warmup_config,
-)
-if ddp:
-    # wait for all processes to finish warmup before entering the main training stage
-    dist.barrier()
-
 
 T = SEQUENCE_LENGTH
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
@@ -108,14 +88,7 @@ torch.set_float32_matmul_precision('high')
 
 # model = GPT.from_pretrained("gpt2") # or init from OpenAI GPT-2
 model.to(device)
-if ddp:
-    dist.barrier()
-    for param in model.parameters():
-        dist.broadcast(param.data, src=0)
-    for buffer in model.buffers():
-        dist.broadcast(buffer.data, src=0)
-if master_process and warmup_epoch_losses:
-    print(f"warmup completed: final_avg_loss={warmup_epoch_losses[-1]:.4f}")
+
 use_compile = False # torch.compile interferes with HellaSwag eval and Generation. TODO fix
 if use_compile:
     model = torch.compile(model)
