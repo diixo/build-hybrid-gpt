@@ -16,4 +16,4 @@ The trained model will be located in `train_products` directory.
 
 
 ## GPT-R (GPT-RoPE)
-GPT-R is hybrid the nano-GPT model with RoPE technique.
+GPT-R is hybrid of nano-GPT model with RoPE technique.
