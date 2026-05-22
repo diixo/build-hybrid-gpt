@@ -66,7 +66,7 @@
       "special": true
     },
     "32264": {
-      "content": "<|instruction|>",
+      "content": "<|im_start|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -74,7 +74,7 @@
       "special": true
     },
     "32265": {
-      "content": "###",
+      "content": "<|im_end|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
@@ -89,8 +89,8 @@
     "<|memory|>",
     "<|dialog|>",
     "<|task|>",
-    "<|instruction|>",
-    "###"
+    "<|im_start|>",
+    "<|im_end|>"
   ],
   "bos_token": "<|endoftext|>",
   "clean_up_tokenization_spaces": false,

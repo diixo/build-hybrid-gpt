@@ -43,14 +43,14 @@
       "single_word": false
     },
     {
-      "content": "<|instruction|>",
+      "content": "<|im_start|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,
       "single_word": false
     },
     {
-      "content": "###",
+      "content": "<|im_end|>",
       "lstrip": false,
       "normalized": false,
       "rstrip": false,

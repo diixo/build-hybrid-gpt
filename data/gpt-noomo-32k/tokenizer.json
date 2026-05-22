@@ -77,7 +77,7 @@
     },
     {
       "id": 32264,
-      "content": "<|instruction|>",
+      "content": "<|im_start|>",
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
@@ -86,7 +86,7 @@
     },
     {
       "id": 32265,
-      "content": "###",
+      "content": "<|im_end|>",
       "single_word": false,
       "lstrip": false,
       "rstrip": false,
