@@ -8,7 +8,7 @@ import time
 import numpy as np
 import torch
 from hellaswag import render_example, iterate_examples, get_most_likely_row
-from model_llama import GPTRForCausalLM
+from auto_config import AutoConfigModel
 from dataloader import DataLoaderLite
 from utils import generate_text
 from transformers import GPT2TokenizerFast
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------------
     tokenizer = GPT2TokenizerFast.from_pretrained(f"data/gpt-noomo-32k", local_files_only=True)
 
-    model = GPTRForCausalLM.from_pretrained("aitetic/gpt-r-0.3b-warmup")
+    model = AutoConfigModel.from_pretrained("aitetic/gpt-r-0.3b-warmup")
     if model is None:
         raise SystemExit("Checkpoint 'aitetic/gpt-r-0.3b-warmup' was not found on Hugging Face Hub or in the local cache.")
     # -----------------------------------------------------------------------------
