@@ -62,9 +62,15 @@ if torch.cuda.is_available():
 
 
 # -----------------------------------------------------------------------------
-tokenizer = GPT2TokenizerFast.from_pretrained(f"data/gpt-noomo-32k", local_files_only=True)
-
 model = GPTRForCausalLM.from_pretrained("aitetic/gpt-r-0.3b-warmup")
+if model is None:
+    if master_process:
+        print("Checkpoint 'aitetic/gpt-r-0.3b-warmup' was not found on Hugging Face Hub or in the local cache.")
+    if ddp:
+        destroy_process_group()
+    raise SystemExit(1)
+
+tokenizer = GPT2TokenizerFast.from_pretrained(f"data/gpt-noomo-32k", local_files_only=True)
 # -----------------------------------------------------------------------------
 
 T = SEQUENCE_LENGTH

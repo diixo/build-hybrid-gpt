@@ -32,6 +32,13 @@ B = 8 # micro batch size
 
 
 if __name__ == "__main__":
+    # -----------------------------------------------------------------------------
+    tokenizer = GPT2TokenizerFast.from_pretrained(f"data/gpt-noomo-32k", local_files_only=True)
+
+    model = GPTRForCausalLM.from_pretrained("aitetic/gpt-r-0.3b-warmup")
+    if model is None:
+        raise SystemExit("Checkpoint 'aitetic/gpt-r-0.3b-warmup' was not found on Hugging Face Hub or in the local cache.")
+    # -----------------------------------------------------------------------------
 
     ddp_rank = 0
     ddp_world_size = 1
@@ -56,12 +63,6 @@ if __name__ == "__main__":
     val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="val", master_process=master_process)
 
     torch.set_float32_matmul_precision('high')
-
-    # -----------------------------------------------------------------------------
-    tokenizer = GPT2TokenizerFast.from_pretrained(f"data/gpt-noomo-32k", local_files_only=True)
-
-    model = GPTRForCausalLM.from_pretrained("aitetic/gpt-r-0.3b-warmup")
-    # -----------------------------------------------------------------------------
 
     model.to(device)
 

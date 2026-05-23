@@ -305,6 +305,8 @@ class GPTRForCausalLM(nn.Module):
         1) raw state_dict
         2) dict with keys like {"model": state_dict, "config": {...}}
         3) separate config.json next to the checkpoint file
+
+        Returns None when the requested Hugging Face repo, revision, or cached entry does not exist.
         """
         source_path = Path(repo_id_or_path)
 
@@ -317,6 +319,13 @@ class GPTRForCausalLM(nn.Module):
             else:
                 try:
                     from huggingface_hub import snapshot_download
+                    from huggingface_hub.utils import (
+                        EntryNotFoundError,
+                        HFValidationError,
+                        LocalEntryNotFoundError,
+                        RepositoryNotFoundError,
+                        RevisionNotFoundError,
+                    )
                 except ImportError as exc:
                     raise ImportError(
                         "huggingface_hub is required to load checkpoints from Hugging Face Hub"
@@ -334,12 +343,21 @@ class GPTRForCausalLM(nn.Module):
                         "pytorch_model.bin",
                     ])
 
-                local_dir = Path(snapshot_download(
-                    repo_id_or_path,
-                    revision=revision,
-                    local_files_only=local_files_only,
-                    allow_patterns=allow_patterns,
-                ))
+                try:
+                    local_dir = Path(snapshot_download(
+                        repo_id_or_path,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        allow_patterns=allow_patterns,
+                    ))
+                except (
+                    EntryNotFoundError,
+                    HFValidationError,
+                    LocalEntryNotFoundError,
+                    RepositoryNotFoundError,
+                    RevisionNotFoundError,
+                ):
+                    return None
 
             if checkpoint_file is not None:
                 checkpoint_path = local_dir / checkpoint_file
