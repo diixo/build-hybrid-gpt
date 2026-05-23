@@ -7,8 +7,7 @@ import json
 import os
 import torch, math, random, numpy as np
 from dataclasses import dataclass
-from model_llama import GPTRForCausalLM
-from auto_config import AutoConfigLlama
+from auto_config import AutoConfigModel
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
@@ -20,7 +19,7 @@ import matplotlib.pyplot as plt
 
 
 SAVE_DIR = "train_products"
-FILE_NAME = "model.pt"
+FILE_NAME = "warmup.pt"
 
 MAX_LEN = 100
 
@@ -306,11 +305,9 @@ if __name__ == "__main__":
 
     tokenizer_type = "gpt-noomo-32k"
 
-    model: GPTRForCausalLM = None
-
     train_config = TrainerConfig(learning_rate=LEARNING_RATE, batch_size=8, grad_accum_steps=1)
 
-    model, tokenizer = AutoConfigLlama.from_config(size_type="mini", tokenizer_type=tokenizer_type)
+    model, tokenizer = AutoConfigModel.from_config(size_type="mini", tokenizer_type=tokenizer_type)
 
 
     print(f"model.sz={model.get_num_params()}")
